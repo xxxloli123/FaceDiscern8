@@ -36,4 +36,16 @@ public class t {
         return "";
     }
 
+    public void onClick(View paramAnonymousView)
+    {
+        if (System.currentTimeMillis() - MyCodeSharedActivity.a(MyCodeSharedActivity.this) < 2000L) {
+            return;
+        }
+        MyCodeSharedActivity.a(MyCodeSharedActivity.this, System.currentTimeMillis());
+        MyCodeSharedActivity.b(MyCodeSharedActivity.this);
+        MyCodeSharedActivity.this.h();
+        MyCodeSharedActivity.c(MyCodeSharedActivity.this).setTextColor(MyCodeSharedActivity.this.getResources().getColor(2131099850));
+        MyCodeSharedActivity.c(MyCodeSharedActivity.this).setBackgroundResource(2131231131);
+        MyCodeSharedActivity.c(MyCodeSharedActivity.this).setText("��������");
+    }
 }
