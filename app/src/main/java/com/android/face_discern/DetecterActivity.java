@@ -8,6 +8,7 @@ import android.graphics.ImageFormat;
 import android.graphics.Rect;
 import android.graphics.YuvImage;
 import android.hardware.Camera;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
@@ -21,7 +22,7 @@ import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
-import com.android.face_discern.GPIO.GPIO;
+import com.android.face_discern.GPIO.FileUtils2;
 import com.android.face_discern.GPIO.GPIOControl;
 import com.android.face_discern.adapter.CaptureImageAdapter;
 import com.android.face_discern.adapter.ContrastAdapter;
@@ -30,6 +31,7 @@ import com.android.face_discern.model.ContrastHelp;
 import com.android.face_discern.util.BitmapFileSetting;
 import com.android.face_discern.util.RxFileTool;
 import com.android.face_discern.util.RxImageTool;
+import com.android.face_discern.util.ToastUtil;
 import com.arcsoft.ageestimation.ASAE_FSDKAge;
 import com.arcsoft.ageestimation.ASAE_FSDKEngine;
 import com.arcsoft.ageestimation.ASAE_FSDKError;
@@ -64,6 +66,8 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
 
 /**
  *
@@ -106,8 +110,6 @@ public class DetecterActivity extends Activity implements OnCameraListener, View
 	Handler mHandler;
 	boolean isPostted = false;
 
-	GPIO gpio;
-
 	Runnable hide = new Runnable() {
 		@Override
 		public void run() {
@@ -120,6 +122,9 @@ public class DetecterActivity extends Activity implements OnCameraListener, View
 	String captureImagePath=Environment.getExternalStorageDirectory().getPath()+"/233311/CaptureImage/"+
 			new SimpleDateFormat("yyyy-MM-dd").format(System.currentTimeMillis());
 //	String CaptureImagePath=SimpleDateFormat.getDateInstance().format(System.currentTimeMillis());
+    private String keyout;
+	private String path="";
+    private  Timer timer;
 
 	class FRAbsLoop extends AbsLoop {
 		boolean isOneSecond=true;
@@ -142,9 +147,6 @@ public class DetecterActivity extends Activity implements OnCameraListener, View
 		@Override
 		public void loop() {
 			if (mImageNV21 != null) {
-
-
-
 				long time = System.currentTimeMillis();
 				AFR_FSDKError error = engine.AFR_FSDK_ExtractFRFeature(mImageNV21, mWidth, mHeight, AFR_FSDKEngine.CP_PAF_NV21, mAFT_FSDKFace.getRect(), mAFT_FSDKFace.getDegree(), result);
 				Log.d(TAG, "AFR_FSDK_ExtractFRFeature cost :" + (System.currentTimeMillis() - time) + "ms");
@@ -213,6 +215,19 @@ public class DetecterActivity extends Activity implements OnCameraListener, View
 							contrastAdapter.setNewData(contrasts);
 						}
 					});
+
+					timer.schedule(new TimerTask() {
+						@Override
+						public void run() {
+							DetecterActivity.this.runOnUiThread(new Runnable() {
+								@Override
+								public void run() {
+									ToastUtil.showToast(DetecterActivity.this,"恢复capture");
+									isOneSecond=true;
+								}
+							});
+						}
+					},1500);
 				}
 
 				try {
@@ -222,7 +237,7 @@ public class DetecterActivity extends Activity implements OnCameraListener, View
 				}
 
 				if (max > 0.6f) {
-					openDoor();
+					if (FileUtils2.read(path).equals("0")) openDoor();
 					//fr success.
 					final float max_score = max;
 					Log.d(TAG, "fit Score:" + max + ", NAME:" + name);
@@ -266,14 +281,6 @@ public class DetecterActivity extends Activity implements OnCameraListener, View
 					});
 				}
 				mImageNV21 = null;
-
-				new Handler().postDelayed(new Runnable() {
-					@Override
-					public void run() {
-						isOneSecond=true;
-					}
-				},1000);
-
 			}
 
 		}
@@ -302,8 +309,22 @@ public class DetecterActivity extends Activity implements OnCameraListener, View
 	}
 
     private void openDoor() {
-		gpio.write("1");
-    }
+		Log.e("openDoor","开门");
+		FileUtils2.method(path, "1");
+		if (FileUtils2.read(path).equals("1")) timer.schedule(new TimerTask() {
+			@Override
+			public void run() {
+				DetecterActivity.this.runOnUiThread(new Runnable() {
+					@Override
+					public void run() {
+						Log.e("closeDoor","关门");
+						FileUtils2.method(path, "0");
+						ToastUtil.showToast(DetecterActivity.this, "定时 关门咯");
+					}
+				});
+			}
+		}, 6000);
+	}
 
     private TextView mTextView;
 	private TextView mTextView1;
@@ -317,8 +338,6 @@ public class DetecterActivity extends Activity implements OnCameraListener, View
 	protected void onCreate(Bundle savedInstanceState) {
 		// TODO Auto-generated method stub
 		super.onCreate(savedInstanceState);
-
-		gpio = new GPIO();
 
 		Toast.makeText(this,"捕獲图片目录" + FileUtils.createOrExistsDir(captureImagePath)
 				,Toast.LENGTH_SHORT).show();
@@ -367,9 +386,32 @@ public class DetecterActivity extends Activity implements OnCameraListener, View
 //		Log.d(TAG, "ASGE_FSDK_GetVersion:" + mGenderVersion.toString() + "," + error1.getCode());
 
 		initView2();
+		initGPIO();
 
 		mFRAbsLoop = new FRAbsLoop();
 		mFRAbsLoop.start();
+	}
+
+	private void initGPIO() {
+		if (Build.MODEL.contains("rk312x")){
+			keyout="/sys/devices/misc_power_en.19/";
+		}else if (Build.MODEL.contains("rk3288")){
+			keyout="/sys/devices/misc_power_en.23/";
+		} else if (Build.MODEL.contains("rk3368")) {
+			keyout="/sys/devices/misc_power_en.22/";
+		}
+		path=keyout+"key_out2";
+		//请求root权限
+		try {
+			Process su = Runtime.getRuntime().exec("su");
+			//获取读写权限
+			String strcmd = "chmod 777"+ path;
+			strcmd = strcmd + "\n exit\n";
+			su.getOutputStream().write(strcmd.getBytes());
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+        timer = new Timer();
 	}
 
 	private void initView2() {
@@ -410,8 +452,18 @@ public class DetecterActivity extends Activity implements OnCameraListener, View
 
 		ASGE_FSDKError err2 = mGenderEngine.ASGE_FSDK_UninitGenderEngine();
 		Log.d(TAG, "ASGE_FSDK_UninitGenderEngine =" + err2.getCode());
+
+		stopTimer();
 	}
 
+	// 停止定时器
+	public void stopTimer(){
+		if(timer != null){
+			timer.cancel();
+			// 一定设置为null，否则定时器不会被回收
+			timer = null;
+		}
+	}
 	@Override
 	public Camera setupCamera() {
 		// TODO Auto-generated method stub
@@ -461,7 +513,6 @@ public class DetecterActivity extends Activity implements OnCameraListener, View
 
 	@Override
 	public void setupChanged(int format, int width, int height) {
-
 	}
 
 	@Override//	   开始	预览	   立即
@@ -506,7 +557,6 @@ public class DetecterActivity extends Activity implements OnCameraListener, View
 
 	@Override
 	public void onBeforeRender(CameraFrameData data) {
-
 	}
 
 	@Override//在渲染之后

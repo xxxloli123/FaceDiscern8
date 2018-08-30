@@ -8,7 +8,9 @@ import com.android.face_discern.model.Contrast;
 import com.bumptech.glide.Glide;
 import com.chad.library.adapter.base.BaseQuickAdapter;
 import com.chad.library.adapter.base.BaseViewHolder;
+import com.squareup.picasso.Picasso;
 
+import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.List;
 
@@ -23,7 +25,8 @@ public class ContrastAdapter extends BaseQuickAdapter<Contrast,BaseViewHolder> {
         helper.setText(R.id.tv_time, new SimpleDateFormat("yyyy.MM.dd").format(item.getTime()));
 
         Glide.with(mContext).load(item.getCaptureImg()).into((ImageView) helper.getView(R.id.img_capture));
-        Glide.with(mContext).load(item.getRegisterImg()).into((ImageView) helper.getView(R.id.img_register));
+//        Glide.with(mContext).load(item.getRegisterImg()).into((ImageView) helper.getView(R.id.img_register));
+        Picasso.get().load(new File(item.getRegisterImg())).into((ImageView) helper.getView(R.id.img_register));
 
         helper.setText(R.id.tv_name, "姓名:"+item.getName());
     }
